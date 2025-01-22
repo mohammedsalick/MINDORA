@@ -51,10 +51,16 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
     else:
         return f"Sorry, there was an error processing your request. Status code: {response.status_code}"
 
+
+@app.route("/home")
+def home():
+    return render_template("home.html")  # Serve home.html for non-logged-in users
+
+
 @app.route("/")
 def index():
     if 'user' not in session:
-        return redirect("/login")
+        return redirect("/home")
     
     # Fetch the user's metadata from Supabase
     user_response = supabase.auth.get_user()
@@ -64,7 +70,9 @@ def index():
         name = "User"
     
     return render_template("index.html", name=name)
-    
+
+
+
 @app.route("/get-chat/<chat_id>", methods=["GET"])
 def get_chat(chat_id):
     try:
