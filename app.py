@@ -1,29 +1,33 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, render_template, redirect, session
+from supabase import create_client, Client
 import requests
-import os
+from datetime import datetime
 
 app = Flask(__name__)
+app.secret_key = 'your_secret_key'  # Required for session management
+
+# Supabase configuration
+SUPABASE_URL = "https://agljeympamqgjsombrdi.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnbGpleW1wYW1xZ2pzb21icmRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc1Mzc2ODcsImV4cCI6MjA1MzExMzY4N30.Fa0g8FqlmGKpSs38I6KRcaEX3Ief2aIMn5M-K93OOBk"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Gemini API details
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
 GEMINI_API_KEY = "AIzaSyBwJavDZUC02-o7tQn2UYcGZfhSf5fmaGw"  # Replace with your actual API key
 
 def get_gemini_response(user_input, username="User", conversation_history=[]):
-    """
-    Send user input to the Gemini API and get the chatbot's response.
-    The chatbot will ask questions and guide the user to reframe their thoughts.
-    """
     headers = {
         "Content-Type": "application/json"
     }
 
-    # Contextual prompt for mental health support
     prompt = f"""
-    You are a mental health support chatbot. Your goal is to help {username} who is facing {user_input}. 
-    Ask open-ended questions to understand their situation better and guide them to reframe their thoughts.
-    Be empathetic, supportive, and avoid providing direct answers. Instead, help them discover solutions on their own.
+    You are a mental health support chatbot. Help {username} who is facing {user_input}. 
+    Be empathetic, supportive, and ask questions to understand their situation better.
     Here is the conversation history so far:
     {conversation_history}
+
+    Always respond as MINDORA and avoid repeating the user's name unnecessarily.
+    Keep your responses concise and natural.
     """
 
     data = {
@@ -36,7 +40,6 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
         ]
     }
 
-    # Add API key as a query parameter
     params = {
         "key": GEMINI_API_KEY
     }
@@ -44,40 +47,201 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
     response = requests.post(GEMINI_API_URL, headers=headers, json=data, params=params)
 
     if response.status_code == 200:
-        # Extract the response text from the API's JSON response
         return response.json()["candidates"][0]["content"]["parts"][0]["text"]
     else:
         return f"Sorry, there was an error processing your request. Status code: {response.status_code}"
 
 @app.route("/")
+def home():
+    return render_template("home.html")
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
+        try:
+            # Sign in with Supabase
+            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            
+            # Extract user data from the AuthResponse object
+            user = auth_response.user
+            if user:
+                # Store user data in the session
+                session['user'] = {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': user.user_metadata.get("name", "User")
+                }
+                return redirect("/index")
+            else:
+                return render_template("login.html", error="Invalid credentials")
+        except Exception as e:
+            return render_template("login.html", error=str(e))
+    return render_template("login.html")
+
+@app.route("/index")
 def index():
-    """
-    Serve the index.html file.
-    """
-    return send_from_directory(os.path.join(app.root_path, 'static'), 'index.html')
+    if 'user' not in session:
+        return redirect("/login")
+    
+    # Fetch the user's metadata from Supabase
+    user_response = supabase.auth.get_user()
+    if user_response and hasattr(user_response, 'user'):
+        name = user_response.user.user_metadata.get("name", "User")
+    else:
+        name = "User"
+    
+    return render_template("index.html", name=name)
+
+@app.route("/get-chat/<chat_id>", methods=["GET"])
+def get_chat(chat_id):
+    try:
+        # Fetch the chat by ID
+        result = supabase.table("chats").select("*").eq("id", chat_id).execute()
+        if result.data:
+            return jsonify(result.data[0])
+        else:
+            return jsonify({"error": "Chat not found"}), 404
+    except Exception as e:
+        print(f"Error fetching chat: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    """
-    Endpoint to handle user messages and return chatbot responses.
-    """
-    user_input = request.json.get("message")
-    username = request.json.get("username", "User")  # Default to "User" if no username is provided
-    conversation_history = request.json.get("history", [])  # Get conversation history
+    try:
+        user_input = request.json.get("message")
+        is_new_chat = request.json.get("is_new_chat", False)
+        chat_id = request.json.get("chat_id")
 
-    if not user_input:
-        return jsonify({"error": "No message provided"}), 400
+        print(f"Received chat_id: {chat_id}, is_new_chat: {is_new_chat}")  # Debugging
 
-    # Add the user's message to the conversation history
-    conversation_history.append(f"{username}: {user_input}")
+        if not user_input:
+            return jsonify({"error": "No message provided"}), 400
 
-    # Get response from Gemini API
-    bot_response = get_gemini_response(user_input, username, conversation_history)
+        # Fetch the user's name and ID from Supabase
+        user_response = supabase.auth.get_user()
+        if user_response and hasattr(user_response, 'user'):
+            user_id = user_response.user.id
+            username = user_response.user.user_metadata.get("name", "User")
+        else:
+            print("User not authenticated")
+            return jsonify({"error": "User not authenticated"}), 401
 
-    # Add the bot's response to the conversation history
-    conversation_history.append(f"Chatbot: {bot_response}")
+        # Fetch the latest chat from Supabase
+        if not is_new_chat and chat_id:
+            result = supabase.table("chats").select("chats").eq("id", chat_id).execute()
+            if result.data:
+                conversation_history = result.data[0].get("chats", [])
+            else:
+                print("Chat not found")
+                return jsonify({"error": "Chat not found"}), 404
+        else:
+            conversation_history = []
 
-    return jsonify({"response": bot_response, "history": conversation_history})
+        # Get bot response
+        bot_response = get_gemini_response(user_input, username, conversation_history)
+        conversation_history.append({"user": user_input, "bot": bot_response})
+
+        # Store or update chat in Supabase
+        if is_new_chat:
+            result = supabase.table("chats").insert({
+                "user_id": user_id,
+                "name": username,
+                "chats": conversation_history
+            }).execute()
+            chat_id = result.data[0]["id"]
+        else:
+            supabase.table("chats").update({
+                "chats": conversation_history
+            }).eq("id", chat_id).execute()
+
+        return jsonify({"response": bot_response, "history": conversation_history, "chat_id": chat_id})
+    except Exception as e:
+        print(f"Error in chat endpoint: {e}")
+        return jsonify({"error": str(e)}), 500  # Return the actual error message
+
+@app.route("/new-chat", methods=["POST"])
+def new_chat():
+    try:
+        # Fetch the user's ID from Supabase
+        user_response = supabase.auth.get_user()
+        if user_response and hasattr(user_response, 'user'):
+            user_id = user_response.user.id
+            username = user_response.user.user_metadata.get("name", "User")
+        else:
+            return jsonify({"error": "User not authenticated"}), 401
+
+        # Create a new chat entry in Supabase
+        result = supabase.table("chats").insert({
+            "user_id": user_id,
+            "name": username,
+            "chats": []
+        }).execute()
+
+        return jsonify({"success": True, "chat_id": result.data[0]["id"]})
+    except Exception as e:
+        print(f"Error creating new chat: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route("/get-chats", methods=["GET"])
+def get_chats():
+    try:
+        # Fetch the user's ID from Supabase
+        user_response = supabase.auth.get_user()
+        if user_response and hasattr(user_response, 'user'):
+            user_id = user_response.user.id
+        else:
+            return jsonify({"error": "User not authenticated"}), 401
+
+        # Fetch all chats for the user
+        result = supabase.table("chats").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return jsonify(result.data)
+    except Exception as e:
+        print(f"Error fetching chats: {e}")
+        return jsonify({"error": "Internal server error"}), 500
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
+        confirm_password = request.form.get("confirm_password")
+        name = request.form.get("name")
+
+        # Validate input fields
+        if not email or not password or not confirm_password or not name:
+            return render_template("register.html", error="Please fill in all fields.")
+
+        if password != confirm_password:
+            return render_template("register.html", error="Passwords do not match.")
+
+        try:
+            # Sign up with Supabase and include additional user metadata
+            auth_response = supabase.auth.sign_up({
+                "email": email,
+                "password": password,
+                "options": {
+                    "data": {
+                        "name": name
+                    }
+                }
+            })
+
+            # Check if registration was successful
+            if auth_response.user:
+                return redirect("/login")
+            else:
+                return render_template("register.html", error="Registration failed.")
+        except Exception as e:
+            return render_template("register.html", error=str(e))
+
+    return render_template("register.html")
+
+@app.route("/logout")
+def logout():
+    session.pop('user', None)
+    return redirect("/")
 
 if __name__ == "__main__":
     app.run(debug=True)

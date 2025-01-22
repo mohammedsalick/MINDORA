@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mindora - Home</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+    <style>
+        html, body {
+            overflow: hidden; /* Disables scrolling */
+            height: 100%;    /* Ensures the height fills the viewport */
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-100 to-green-100">
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <span class="text-2xl font-bold text-blue-700 tracking-wide">MINDORA</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="hero-section" class="h-screen flex items-center justify-center bg-gradient-to-r from-blue-50 to-green-50">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div>
+                    <h1 class="text-4xl md:text-5xl font-bold text-gray-800 leading-snug mb-4">
+                        Your Health, Your Companion.<br/>Anytime, Anywhere.
+                    </h1>
+                    <p class="text-base md:text-lg text-gray-700 leading-relaxed mb-6">
+                        Simplifying healthcare for you with our AI-powered assistant. Stay healthy, stay happy.
+                    </p>
+                    <a href="/login" class="bg-gradient-to-r from-blue-600 to-green-500 text-white px-8 py-3 rounded-lg text-base shadow-lg hover:shadow-xl transform hover:scale-105 transition inline-block">
+                        Talk to Your Health Assistant Now!
+                    </a>
+                </div>
+                <div class="flex justify-center">
+                    <lottie-player src="https://assets2.lottiefiles.com/packages/lf20_jcsfwbvi.json" background="transparent" speed="1" style="width: 400px; height: 400px;" loop autoplay></lottie-player>
+                </div>
+            </div>
+        </div>
+    </section>
+</body>
+</html>
