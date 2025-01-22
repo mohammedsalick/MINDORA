@@ -1,19 +1,24 @@
 from flask import Flask, request, jsonify, render_template, redirect, session
 from supabase import create_client, Client
+from dotenv import load_dotenv
+import os
 import requests
 from datetime import datetime
 
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'  # Required for session management
+app.secret_key = 'your_secret_key' # Required for session management
 
 # Supabase configuration
-SUPABASE_URL = "https://agljeympamqgjsombrdi.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFnbGpleW1wYW1xZ2pzb21icmRpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc1Mzc2ODcsImV4cCI6MjA1MzExMzY4N30.Fa0g8FqlmGKpSs38I6KRcaEX3Ief2aIMn5M-K93OOBk"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Gemini API details
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
-GEMINI_API_KEY = "AIzaSyBwJavDZUC02-o7tQn2UYcGZfhSf5fmaGw"  # Replace with your actual API key
+GEMINI_API_URL = os.getenv("GEMINI_API_URL")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 def get_gemini_response(user_input, username="User", conversation_history=[]):
     headers = {
