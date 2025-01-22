@@ -52,35 +52,6 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
         return f"Sorry, there was an error processing your request. Status code: {response.status_code}"
 
 @app.route("/")
-def home():
-    return render_template("home.html")
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        email = request.form.get("email")
-        password = request.form.get("password")
-        try:
-            # Sign in with Supabase
-            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            
-            # Extract user data from the AuthResponse object
-            user = auth_response.user
-            if user:
-                # Store user data in the session
-                session['user'] = {
-                    'id': user.id,
-                    'email': user.email,
-                    'name': user.user_metadata.get("name", "User")
-                }
-                return redirect("/index")
-            else:
-                return render_template("login.html", error="Invalid credentials")
-        except Exception as e:
-            return render_template("login.html", error=str(e))
-    return render_template("login.html")
-
-@app.route("/index")
 def index():
     if 'user' not in session:
         return redirect("/login")
@@ -93,7 +64,7 @@ def index():
         name = "User"
     
     return render_template("index.html", name=name)
-
+    
 @app.route("/get-chat/<chat_id>", methods=["GET"])
 def get_chat(chat_id):
     try:
@@ -201,6 +172,32 @@ def get_chats():
         print(f"Error fetching chats: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email")
+        password = request.form.get("password")
+        try:
+            # Sign in with Supabase
+            auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            
+            # Extract user data from the AuthResponse object
+            user = auth_response.user
+            if user:
+                # Store user data in the session
+                session['user'] = {
+                    'id': user.id,
+                    'email': user.email,
+                    'name': user.user_metadata.get("name", "User")
+                }
+                return redirect("/")
+            else:
+                return render_template("login.html", error="Invalid credentials")
+        except Exception as e:
+            return render_template("login.html", error=str(e))
+    return render_template("login.html")
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -241,7 +238,7 @@ def register():
 @app.route("/logout")
 def logout():
     session.pop('user', None)
-    return redirect("/")
+    return redirect("/login")
 
 if __name__ == "__main__":
     app.run(debug=True)
