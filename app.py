@@ -25,6 +25,9 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
         "Content-Type": "application/json"
     }
 
+    # Debug prints
+    print(f"API URL being used: {GEMINI_API_URL}")
+
     prompt = f"""
     You are a mental health support chatbot. Help {username} who is facing {user_input}. 
     Be empathetic, supportive, and ask questions to understand their situation better.
@@ -35,6 +38,8 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
     Keep your responses concise and natural.
     """
 
+    # Notice we're NOT specifying the model in the data
+    # The model is already in the URL from the .env file
     data = {
         "contents": [
             {
@@ -45,18 +50,19 @@ def get_gemini_response(user_input, username="User", conversation_history=[]):
         ]
     }
 
-    params = {
-        "key": GEMINI_API_KEY
-    }
+    url = f"{GEMINI_API_URL}?key={GEMINI_API_KEY}"
 
-    response = requests.post(GEMINI_API_URL, headers=headers, json=data, params=params)
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        print(f"Response status: {response.status_code}")
+        print(f"Response content: {response.text}")
 
-    if response.status_code == 200:
-        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-    else:
-        return f"Sorry, there was an error processing your request. Status code: {response.status_code}"
-
-
+        if response.status_code == 200:
+            return response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        else:
+            return f"Sorry, there was an error processing your request. Status code: {response.status_code}. Details: {response.text}"
+    except Exception as e:
+        return f"Error: {str(e)}"
 @app.route("/home")
 def home():
     return render_template("home.html")  # Serve home.html for non-logged-in users
@@ -113,15 +119,18 @@ def chat():
             return jsonify({"error": "User not authenticated"}), 401
 
         # Fetch the latest chat from Supabase
+        conversation_history = []
         if not is_new_chat and chat_id:
             result = supabase.table("chats").select("chats").eq("id", chat_id).execute()
             if result.data:
                 conversation_history = result.data[0].get("chats", [])
             else:
                 print("Chat not found")
-                return jsonify({"error": "Chat not found"}), 404
+                # If the chat ID is invalid, treat it as a new chat instead of returning an error
+                is_new_chat = True
         else:
-            conversation_history = []
+            # If no chat_id is provided or explicitly marked as new chat
+            is_new_chat = True
 
         # Get bot response
         bot_response = get_gemini_response(user_input, username, conversation_history)
@@ -136,15 +145,24 @@ def chat():
             }).execute()
             chat_id = result.data[0]["id"]
         else:
-            supabase.table("chats").update({
-                "chats": conversation_history
-            }).eq("id", chat_id).execute()
+            # Make sure chat_id is not None before using it
+            if chat_id:
+                supabase.table("chats").update({
+                    "chats": conversation_history
+                }).eq("id", chat_id).execute()
+            else:
+                # Handle the case where chat_id is None but is_new_chat is False
+                result = supabase.table("chats").insert({
+                    "user_id": user_id,
+                    "name": username,
+                    "chats": conversation_history
+                }).execute()
+                chat_id = result.data[0]["id"]
 
         return jsonify({"response": bot_response, "history": conversation_history, "chat_id": chat_id})
     except Exception as e:
         print(f"Error in chat endpoint: {e}")
         return jsonify({"error": str(e)}), 500  # Return the actual error message
-
 @app.route("/new-chat", methods=["POST"])
 def new_chat():
     try:
